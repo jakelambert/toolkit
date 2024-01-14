@@ -87,7 +87,10 @@ func TestTools_UploadFiles(t *testing.T) {
 			}
 
 			// clean up downloaded file
-			_ = os.Remove(fmt.Sprintf("./testdata/uploads/%s", uploadedFiles[0].NewFileName))
+			err = os.Remove(fmt.Sprintf("./testdata/uploads/%s", uploadedFiles[0].NewFileName))
+			if err != nil {
+				fmt.Println(err)
+			}
 		}
 
 		if e.errorExpected && err == nil {
@@ -163,4 +166,62 @@ func TestTools_CreateDirIfNotExist(t *testing.T) {
 	}
 
 	_ = os.Remove("./testdata/myDir")
+}
+
+var slugTests = []struct {
+	name          string
+	s             string
+	expected      string
+	errorExpected bool
+}{
+	{name: "valid string", s: "now is the time", expected: "now-is-the-time", errorExpected: false},
+	{name: "empty string", s: "", expected: "", errorExpected: true},
+	{name: "complex string", s: "Now is the time for all GOOD men! + fish & such &^123", expected: "now-is-the-time-for-all-good-men-fish-such-123", errorExpected: false},
+	{name: "japanese", s: "ハローワールド！", expected: "", errorExpected: true},
+	{name: "japanese string and Roman characters", s: "hello world: ハローワールド！", expected: "hello-world", errorExpected: false},
+}
+
+func TestTools_Slugify(t *testing.T) {
+	var testTool Tools
+
+	for _, e := range slugTests {
+		slug, err := testTool.Slugify(e.s)
+		if err != nil && !e.errorExpected {
+			t.Errorf("%s: error received when none expected: %s", e.name, err.Error())
+		}
+
+		if !e.errorExpected && slug != e.expected {
+			t.Errorf("%s: wrong slug returned; expected %s but got %s", e.name, e.expected, slug)
+		}
+	}
+}
+
+func TestTools_DownloadStaticFile(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+
+	var testTool Tools
+
+	testTool.DownloadStaticFile(rr, req, "./testdata", "pic.jpg", "puppy.jpg")
+
+	res := rr.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		t.Error("unexpected response status code")
+		return
+	}
+
+	if res.Header["Content-Length"][0] != "98827" {
+		t.Error("wrong content length of", res.Header["Content-Length"][0])
+	}
+
+	if res.Header["Content-Disposition"][0] != "attachment; filename=\"puppy.jpg\"" {
+		t.Error("wrong content disposition")
+	}
+
+	_, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Error(err)
+	}
 }
